@@ -118,6 +118,31 @@
     <p class="note">Estimates only. Real offers depend on testing, alloy, hollow or filled construction, stones, and dealer policy. Melt value uses fineness: 10K 41.7%, 14K 58.5%, 18K 75.0%, 22K 91.6%, 24K 99.9%.</p>
   </div>
 
+  <!-- SHOP PRICE CHECK -->
+  <div class="card full">
+    <h2>4. Check a Shop's Price</h2>
+    <p class="note">Uses the spot price, karat, and weight from the sections above. Enter the price a shop posted for that piece to see how much of it is gold and how much is premium.</p>
+    <div class="row2">
+      <label>Shop's posted price (USD)
+        <input id="shopPrice" type="number" step="0.01" min="0" placeholder="price on the tag">
+      </label>
+      <label>Labor the shop charges (USD, optional)
+        <input id="shopLabor" type="number" step="0.01" min="0" placeholder="leave blank if unknown">
+      </label>
+    </div>
+    <button id="checkShop" type="button">Check shop price</button>
+    <div class="err" id="shopErr"></div>
+    <table style="margin-top:14px">
+      <tr><td>Melt value of the gold in this piece</td><td class="r" id="sMelt">-</td></tr>
+      <tr><td>Premium you pay over melt (USD)</td><td class="r" id="sPremUsd">-</td></tr>
+      <tr><td>Premium over melt (%)</td><td class="r" id="sPremPct">-</td></tr>
+      <tr><td>Premium after removing labor (%)</td><td class="r" id="sPremNoLab">-</td></tr>
+      <tr><td>Shop price per gram of the piece</td><td class="r" id="sPerG">-</td></tr>
+      <tr><td>Gold spot per gram for this karat</td><td class="r" id="sSpotG">-</td></tr>
+    </table>
+    <p class="note">Premium = (shop price − melt value) ÷ melt value. Removing labor shows how much of the premium is markup on the gold itself. Estimates only; the shop's price may include tax, stones, or brand.</p>
+  </div>
+
   <!-- LABOR SETTINGS -->
   <div class="card full">
     <h2>3. Retail Labor Charges (flat per piece, USD)</h2>
@@ -268,6 +293,32 @@
     status.textContent = 'All sources failed (' + errors.join('; ') + '). Enter the spot price manually.';
   }
   $('fetchPrice').addEventListener('click', fetchLivePrice);
+
+  // Shop price check: back out how much of a posted price is melt value vs premium.
+  $('checkShop').addEventListener('click', () => {
+    const e = $('shopErr');
+    e.textContent = '';
+    const spotOz = num('spot');
+    const weight = num('weight');
+    const karat = parseInt($('karat').value, 10);
+    const shop = num('shopPrice');
+    const lab = parseFloat($('shopLabor').value);
+    if (!(spotOz > 0) || !(weight > 0)) { e.textContent = 'Enter the spot price and piece weight above first.'; return; }
+    if (!(shop > 0)) { e.textContent = "Enter the shop's posted price."; return; }
+
+    const spotG = spotOz / TROY_OZ_G;
+    const melt = weight * FINENESS[karat] * spotG;
+    const premUsd = shop - melt;
+    const premPct = premUsd / melt * 100;
+    const noLabPct = isFinite(lab) ? (shop - lab - melt) / melt * 100 : NaN;
+
+    $('sMelt').textContent = fmt2(melt);
+    $('sPremUsd').textContent = fmt2(premUsd);
+    $('sPremPct').textContent = pct(premPct);
+    $('sPremNoLab').textContent = isFinite(noLabPct) ? pct(noLabPct) : 'enter labor to see';
+    $('sPerG').textContent = fmt2(shop / weight) + ' / g';
+    $('sSpotG').textContent = fmt2(spotG * FINENESS[karat]) + ' / g';
+  });
 
   $('calc').addEventListener('click', calculate);
   document.querySelectorAll('input, select').forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); }));

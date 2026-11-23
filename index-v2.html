@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gold Jewelry Calculator</title>
+<style>
+  :root { --gold:#b8860b; --bg:#f7f5f0; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e2ddd0; --ok:#1f7a3d; --bad:#b3261e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); padding:16px; }
+  .wrap { max-width: 860px; margin: 0 auto; display:grid; gap:16px; grid-template-columns: 1fr; }
+  @media (min-width: 760px) { .wrap { grid-template-columns: 1fr 1fr; } .full { grid-column: 1 / -1; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 12px; color:var(--gold); text-transform:uppercase; letter-spacing:.04em; }
+  p.note { font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.4; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:10px; }
+  input, select { width:100%; margin-top:4px; padding:9px 10px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { width:100%; padding:12px; font-size:16px; font-weight:600; border:0; border-radius:10px; background:var(--gold); color:#fff; cursor:pointer; }
+  button:hover { filter:brightness(1.05); }
+  .kpi { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .box { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fcfbf7; }
+  .box .k { font-size:12px; color:var(--muted); }
+  .box .v { font-size:20px; font-weight:700; margin-top:4px; }
+  .buy .v { color:var(--ok); } .sell .v { color:var(--gold); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td { padding:7px 4px; border-bottom:1px solid var(--line); }
+  td.r { text-align:right; font-variant-numeric: tabular-nums; }
+  tr.total td { font-weight:700; border-bottom:0; }
+  .err { color:var(--bad); font-size:13px; min-height:18px; margin-top:6px; }
+  .spread { font-weight:700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card full">
+    <h1>Gold Jewelry Calculator</h1>
+    <p class="note">Enter today's spot price, then the piece details. Buy and sell prices are estimates driven by the spread and labor settings below. Update the spot price and settings to match your own market.</p>
+  </div>
+
+  <!-- MARKET -->
+  <div class="card">
+    <h2>1. Market & Spreads</h2>
+    <label>Gold spot price (USD per troy oz)
+      <input id="spot" type="number" step="0.01" min="0" placeholder="click Get live price">
+    </label>
+    <button id="fetchPrice" type="button">Refresh spot price (PAXG) and recalculate</button>
+    <p class="note" id="priceStatus">PAXG is a gold-backed token, 1 PAXG = 1 troy oz of gold, so its USD price tracks spot. Fetched from CoinGecko, no key needed. You can still type a price manually.</p>
+    <div class="row2">
+      <label>Your buy offer (% of melt)
+        <input id="buyPct" type="number" step="0.5" min="0" value="90">
+      </label>
+      <label>Retail premium over melt (%)
+        <input id="markup" type="number" step="0.5" min="0" value="40">
+      </label>
+    </div>
+    <p class="note">Buy offer is what you pay a customer for scrap gold (typically a discount to melt). Retail markup is the margin on top of melt when you sell.</p>
+  </div>
+
+  <!-- PIECE -->
+  <div class="card">
+    <h2>2. Piece Details</h2>
+    <div class="row2">
+      <label>Type
+        <select id="type">
+          <option value="chain">Chain</option>
+          <option value="bracelet">Bracelet</option>
+          <option value="earring">Earring</option>
+          <option value="ring">Ring</option>
+        </select>
+      </label>
+      <label>Karat
+        <select id="karat">
+          <option value="10">10K (41.7%)</option>
+          <option value="14">14K (58.5%)</option>
+          <option value="18" selected>18K (75.0%)</option>
+          <option value="22">22K (91.6%)</option>
+          <option value="24">24K (99.9%)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row2">
+      <label>Weight (grams)
+        <input id="weight" type="number" step="0.01" min="0" placeholder="0.00">
+      </label>
+      <label>Length (cm)
+        <input id="length" type="number" step="0.1" min="0" placeholder="optional">
+      </label>
+    </div>
+    <label>Width (mm)
+      <input id="width" type="number" step="0.1" min="0" placeholder="optional">
+    </label>
+    <div class="err" id="err"></div>
+    <button id="calc">Calculate</button>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="card full" id="resultsCard" style="display:none">
+    <h2>Results</h2>
+    <div class="kpi">
+      <div class="box buy"><div class="k">You pay (buy offer)</div><div class="v" id="buyTotal">-</div><div class="k" id="buyPerG">-</div></div>
+      <div class="box sell"><div class="k">Retail sell price</div><div class="v" id="sellTotal">-</div><div class="k" id="sellPerG">-</div></div>
+    </div>
+    <table style="margin-top:14px">
+      <tr><td>Fine gold content</td><td class="r" id="pureG">-</td></tr>
+      <tr><td>Gold price per gram, this karat (spot)</td><td class="r" id="karatPerG">-</td></tr>
+      <tr><td>Melt value (fine gold × spot)</td><td class="r" id="melt">-</td></tr>
+      <tr><td>Labor / making charge (retail only)</td><td class="r" id="labor">-</td></tr>
+      <tr><td>Retail markup</td><td class="r" id="markupAmt">-</td></tr>
+      <tr><td>Spread (retail − buy offer)</td><td class="r spread" id="spread">-</td></tr>
+      <tr><td>Spread as % of buy offer</td><td class="r" id="spreadPct">-</td></tr>
+      <tr><td>Weight per cm of length</td><td class="r" id="gPerCm">-</td></tr>
+      <tr><td>Retail price per cm of length</td><td class="r" id="pricePerCm">-</td></tr>
+      <tr><td>Weight per cm² of face area (width × length)</td><td class="r" id="gPerCm2">-</td></tr>
+    </table>
+    <p class="note">Estimates only. Real offers depend on testing, alloy, hollow or filled construction, stones, and dealer policy. Melt value uses fineness: 10K 41.7%, 14K 58.5%, 18K 75.0%, 22K 91.6%, 24K 99.9%.</p>
+  </div>
+
+  <!-- LABOR SETTINGS -->
+  <div class="card full">
+    <h2>3. Retail Labor Charges (flat per piece, USD)</h2>
+    <div class="row2" style="grid-template-columns:repeat(4,1fr)">
+      <label>Chain<input id="labChain" type="number" step="1" min="0" value="10"></label>
+      <label>Bracelet<input id="labBracelet" type="number" step="1" min="0" value="12"></label>
+      <label>Earring<input id="labEarring" type="number" step="1" min="0" value="8"></label>
+      <label>Ring<input id="labRing" type="number" step="1" min="0" value="15"></label>
+    </div>
+    <p class="note">Placeholder values. Set these to what you actually charge for sizing, setting, and finishing.</p>
+  </div>
+
+</div>
+
+<script>
+  const FINENESS = { 10: 0.417, 14: 0.585, 18: 0.750, 22: 0.916, 24: 0.999 };
+  const TROY_OZ_G = 31.1035;
+  const $ = id => document.getElementById(id);
+  const num = id => parseFloat($(id).value);
+  const fmt = n => (isFinite(n) ? n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : '-');
+  const fmt2 = n => (isFinite(n) ? n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-');
+  const pct = n => (isFinite(n) ? n.toFixed(1) + '%' : '-');
+
+  // Persist inputs locally (best effort)
+  const KEYS = ['spot','buyPct','markup','labChain','labBracelet','labEarring','labRing','type','karat'];
+  try {
+    const saved = JSON.parse(localStorage.getItem('goldCalc') || '{}');
+    KEYS.forEach(k => { if (saved[k] !== undefined) $(k).value = saved[k]; });
+  } catch (e) {}
+  function persist() {
+    try {
+      const o = {}; KEYS.forEach(k => o[k] = $(k).value);
+      localStorage.setItem('goldCalc', JSON.stringify(o));
+    } catch (e) {}
+  }
+
+  function calculate() {
+    const err = $('err');
+    err.textContent = '';
+    const spotOz = num('spot');
+    const weight = num('weight');
+    const karat = parseInt($('karat').value, 10);
+    const type = $('type').value;
+    const buyPct = num('buyPct') / 100;
+    const markup = num('markup') / 100;
+    const length = parseFloat($('length').value);
+    const widthMm = parseFloat($('width').value);
+
+    if (!(spotOz > 0)) { err.textContent = 'Enter the gold spot price.'; return; }
+    if (!(weight > 0)) { err.textContent = 'Enter the piece weight in grams.'; return; }
+
+    const laborFlat = num('lab' + type.charAt(0).toUpperCase() + type.slice(1));
+    const fine = FINENESS[karat];
+    const spotG = spotOz / TROY_OZ_G;
+    const pureG = weight * fine;
+    const melt = pureG * spotG;
+    const karatPerG = spotG * fine;
+    const buyTotal = melt * buyPct;
+    const markupAmt = melt * markup;
+    const sellTotal = melt + markupAmt + (isFinite(laborFlat) ? laborFlat : 0);
+    const spread = sellTotal - buyTotal;
+
+    $('buyTotal').textContent = fmt2(buyTotal);
+    $('buyPerG').textContent = fmt2(buyTotal / weight) + ' per gram (piece)';
+    $('sellTotal').textContent = fmt2(sellTotal);
+    $('sellPerG').textContent = fmt2(sellTotal / weight) + ' per gram (piece)';
+
+    $('pureG').textContent = pureG.toFixed(3) + ' g';
+    $('karatPerG').textContent = fmt2(karatPerG) + ' / g';
+    $('melt').textContent = fmt2(melt);
+    $('labor').textContent = fmt2(laborFlat || 0);
+    $('markupAmt').textContent = fmt2(markupAmt);
+    $('spread').textContent = fmt2(spread);
+    $('spreadPct').textContent = pct(buyTotal > 0 ? (spread / buyTotal) * 100 : NaN);
+
+    const hasLen = length > 0;
+    $('gPerCm').textContent = hasLen ? (weight / length).toFixed(3) + ' g/cm' : '-';
+    $('pricePerCm').textContent = hasLen ? fmt2(sellTotal / length) + ' / cm' : '-';
+    const hasArea = hasLen && widthMm > 0;
+    $('gPerCm2').textContent = hasArea ? (weight / (length * (widthMm / 10))).toFixed(3) + ' g/cm²' : '-';
+
+    $('resultsCard').style.display = 'block';
+    $('resultsCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    persist();
+  }
+
+  // Price sources, tried in order. Each returns a USD price per troy oz (PAXG = 1 oz gold).
+  const PRICE_SOURCES = [
+    {
+      name: 'CoinGecko (PAXG)',
+      url: 'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd',
+      parse: d => d['pax-gold'] && d['pax-gold'].usd
+    },
+    {
+      name: 'Binance (PAXGUSDT)',
+      url: 'https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT',
+      parse: d => parseFloat(d.price)
+    },
+    {
+      name: 'Kraken (PAXGUSD)',
+      url: 'https://api.kraken.com/0/public/Ticker?pair=PAXGUSD',
+      parse: d => {
+        const pair = d.result && Object.values(d.result)[0];
+        return pair ? parseFloat(pair.c[0]) : NaN;
+      }
+    },
+    {
+      name: 'Crypto.com (PAXG_USD)',
+      url: 'https://api.crypto.com/exchange/v1/public/get-tickers?instrument_name=PAXG_USD',
+      parse: d => {
+        const t = d.result && d.result.data && d.result.data[0];
+        return t ? parseFloat(t.a) : NaN;
+      }
+    }
+  ];
+
+  async function fetchLivePrice() {
+    const status = $('priceStatus');
+    status.textContent = 'Fetching PAXG price...';
+    // Primary: price.json, refreshed every 15 minutes by GitHub Actions on this same site.
+    try {
+      const res = await fetch('price.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (!(d.price > 0)) throw new Error('no price in file');
+      $('spot').value = d.price.toFixed(2);
+      status.textContent = 'Spot $' + d.price.toFixed(2) + ' (PAXG via ' + d.source + ', updated ' + d.updated_utc + ' UTC). Refreshes every ~15 min.';
+      persist();
+      if (num('weight') > 0) calculate();
+      return;
+    } catch (e) { /* price.json unavailable; fall back to the direct sources below */ }
+    const errors = [];
+    for (const src of PRICE_SOURCES) {
+      try {
+        const res = await fetch(src.url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const price = src.parse(await res.json());
+        if (!(price > 0)) throw new Error('no price in response');
+        $('spot').value = price.toFixed(2);
+        status.textContent = 'Live price $' + price.toFixed(2) + ' from ' + src.name + ' at ' + new Date().toLocaleTimeString() + '.';
+        persist();
+        if (num('weight') > 0) calculate();
+        return;
+      } catch (e) {
+        errors.push(src.name + ': ' + e.message);
+      }
+    }
+    status.textContent = 'All sources failed (' + errors.join('; ') + '). Enter the spot price manually.';
+  }
+  $('fetchPrice').addEventListener('click', fetchLivePrice);
+
+  $('calc').addEventListener('click', calculate);
+  document.querySelectorAll('input, select').forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); }));
+</script>
+</body>
+</html>
